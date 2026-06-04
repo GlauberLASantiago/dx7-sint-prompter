@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DX7 FM Synth & AI Prompt Builder</title>
+<!-- Favicon -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23111'/><path d='M20 80 L50 20 L80 80 Z' fill='%230f0'/></svg>">
+<style>
+body { background: #111; color: #eee; font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+.panel { background: #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; }
+input, button, select, textarea { width: 100%; box-sizing: border-box; }
+input[type=range] { margin: 10px 0 15px 0; accent-color: #0f0; }
+button { background: #333; color: #0f0; border: 1px solid #0f0; padding: 10px; cursor: pointer; border-radius: 4px; font-weight: bold; margin-bottom: 10px; }
+button:hover { background: #0f0; color: #000; }
+textarea { height: 220px; background: #000; color: #0f0; border: 1px solid #444; padding: 10px; font-family: monospace; resize: vertical; }
+label { color: #aaa; font-size: 0.9em; display: flex; justify-content: space-between; }
+.val { color: #0f0; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>DX7 FM Synth (Gerador IA)</h1>
+
+<div class="panel">
+    <h3>Preset DX7</h3>
+    <select id="preset" onchange="loadPreset()" style="padding: 8px; margin-bottom: 10px;">
+        <option>E.PIANO 1</option>
+        <option>Tubular Bells</option>
+        <option>FM Bass</option>
+        <option>Glass Pad</option>
+    </select>
+    <button onclick="loadPreset()">Carregar Preset</button>
+</div>
+
+<div class="panel">
+    <h3>Controles FM</h3>
+    
+    <label>Carrier Ratio <span class="val" id="val-carrier">1</span></label>
+    <input id="carrier" type="range" min="0.25" max="8" step="0.01" value="1" oninput="updateUI()">
+    
+    <label>Modulator Ratio <span class="val" id="val-mod">2</span></label>
+    <input id="mod" type="range" min="0.25" max="16" step="0.01" value="2" oninput="updateUI()">
+    
+    <label>Modulation Index <span class="val" id="val-index">800</span></label>
+    <input id="index" type="range" min="0" max="2000" value="800" oninput="updateUI()">
+    
+    <label>Volume <span class="val" id="val-vol">0.7</span></label>
+    <input id="vol" type="range" min="0" max="1" step="0.01" value="0.7" oninput="updateUI()">
+</div>
+
+<div class="panel">
+    <button onclick="playDX()">Tocar Cmaj7 DX7</button>
+    <button onclick="exportPrompt()">Gerar Prompt para IA</button>
+    <textarea id="code" placeholder="O prompt para a IA será gerado aqui..."></textarea>
+</div>
+
+<script>
+let ctx;
+function initAudio() {
+    if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+const presets = {
+    "E.PIANO 1": { carrier: 1, mod: 14, index: 1200, vol: 0.7 },
+    "Tubular Bells": { carrier: 1, mod: 3.5, index: 1800, vol: 0.7 },
+    "FM Bass": { carrier: 1, mod: 2, index: 900, vol: 0.8 },
+    "Glass Pad": { carrier: 1, mod: 5, index: 1400, vol: 0.5 }
+};
+
+const els = {
+    preset: document.getElementById('preset'),
+    carrier: document.getElementById('carrier'),
+    mod: document.getElementById('mod'),
+    index: document.getElementById('index'),
+    vol: document.getElementById('vol'),
+    code: document.getElementById('code')
+};
+
+function updateUI() {
+    document.getElementById('val-carrier').innerText = els.carrier.value;
+    document.getElementById('val-mod').innerText = els.mod.value;
+    document.getElementById('val-index').innerText = els.index.value;
+    document.getElementById('val-vol').innerText = els.vol.value;
+}
+
+function loadPreset() {
+    let p = presets[els.preset.value];
+    els.carrier.value = p.carrier;
+    els.mod.value = p.mod;
+    els.index.value = p.index;
+    els.vol.value = p.vol;
+    updateUI();
+}
+
+function playFM(freq, time, dur) {
+    initAudio();
+
+    let carrierOsc = ctx.createOscillator();
+    let modOsc = ctx.createOscillator();
+
+    let modGain = ctx.createGain();
+    let amp = ctx.createGain();
+
+    carrierOsc.frequency.value = freq * parseFloat(els.carrier.value);
+    modOsc.frequency.value = freq * parseFloat(els.mod.value);
+
+    let maxIndex = parseFloat(els.index.value);
+    let maxVol = parseFloat(els.vol.value);
+
+    // --- MELHORIA DE SOM: Envelope no Índice de Modulação ---
+    // Isso faz o timbre "estalar" no começo e suavizar (como um piano/sino real)
+    modGain.gain.setValueAtTime(0, time);
+    modGain.gain.linearRampToValueAtTime(maxIndex, time + 0.02);
+    modGain.gain.exponentialRampToValueAtTime(Math.max(1, maxIndex * 0.1), time + dur * 0.8);
+
+    modOsc.connect(modGain);
+    modGain.connect(carrierOsc.frequency);
+
+    // --- MELHORIA DE SOM: Envelope de Amplitude suavizado ---
+    amp.gain.setValueAtTime(0, time);
+    amp.gain.linearRampToValueAtTime(maxVol, time + 0.01);
+    amp.gain.exponentialRampToValueAtTime(maxVol * 0.3, time + 0.5);
+    amp.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+
+    carrierOsc.connect(amp);
+    amp.connect(ctx.destination);
+
+    carrierOsc.start(time);
+    modOsc.start(time);
+
+    carrierOsc.stop(time + dur);
+    modOsc.stop(time + dur);
+}
+
+// Mantida a exata lógica e array de notas original do seu código
+function playDX() {
+    initAudio();
+    let notes = [261.63, 329.63, 392.00, 493.88];
+    let t = ctx.currentTime;
+    notes.forEach((n, i) => playFM(n, t + i * 0.25, 1.5));
+}
+
+// Nova função: Gera as instruções para a IA
+function exportPrompt() {
+    const pName = els.preset.value;
+    const c = els.carrier.value;
+    const m = els.mod.value;
+    const idx = els.index.value;
+    const v = els.vol.value;
+
+    const promptText = `Aja como um programador especialista em Web Audio API. 
+Eu criei um timbre usando Síntese FM (2 operadores) com a seguinte configuração:
+
+- Carrier Ratio: ${c}
+- Modulator Ratio: ${m}
+- Modulation Index Máximo: ${idx}
+- Volume Base: ${v}
+
+Por favor, gere uma função JavaScript chamada \`playTone(frequenciaBase, audioContext)\` que reproduza este exato timbre usando Web Audio API.
+
+Regras de implementação:
+1. Crie dois osciladores 'sine' (Carrier e Modulator).
+2. A frequência do Carrier é frequenciaBase * ${c}.
+3. A frequência do Modulator é frequenciaBase * ${m}.
+4. Conecte o Modulator em um GainNode (ModGain), e este GainNode no .frequency do Carrier.
+5. IMPORTANTE: Para o som ficar natural, aplique um envelope no ModGain. Ele deve atingir rapidamente o valor de ${idx} (ataque) e decair exponencialmente ao longo de 1 segundo.
+6. Aplique um envelope ADSR simples no ganho final de saída (Volume máximo: ${v}) antes de ir para o destino.`;
+
+    els.code.value = promptText;
+    els.code.select(); // Seleciona o texto para facilitar o copiar e colar
+}
+
+loadPreset();
+</script>
+</body>
+</html>
