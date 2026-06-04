@@ -40,6 +40,8 @@ self.addEventListener('fetch', (event) => {
       if (cachedResponse) return cachedResponse;
 
       return fetch(event.request).then((networkResponse) => {
+        if (!networkResponse.ok) return networkResponse;
+
         const responseCopy = networkResponse.clone();
 
         caches.open(CACHE_NAME).then((cache) => {
