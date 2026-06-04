@@ -3,9 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="PWA para explorar presets de síntese FM inspirados no DX7, tocar acordes e gerar prompts para IA com Web Audio API.">
+<meta name="keywords" content="DX7, síntese FM, PWA, Web Audio API, gerador de prompt, UFSCar">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>DX7 FM Synth & AI Prompt Builder</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- Favicon -->
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23111'/><path d='M20 80 L50 20 L80 80 Z' fill='%230f0'/></svg>">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <style>
 body { background: #111; color: #eee; font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
 .panel { background: #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; }
@@ -16,10 +23,13 @@ button:hover { background: #0f0; color: #000; }
 textarea { height: 220px; background: #000; color: #0f0; border: 1px solid #444; padding: 10px; font-family: monospace; resize: vertical; }
 label { color: #aaa; font-size: 0.9em; display: flex; justify-content: space-between; }
 .val { color: #0f0; font-weight: bold; }
+.credits { text-align: center; color: #9f9f9f; font-size: 0.95rem; margin: -5px 0 20px 0; }
+#install-btn[hidden] { display: none; }
 </style>
 </head>
 <body>
 <h1>DX7 FM Synth (Gerador IA)</h1>
+<p class="credits">Créditos: Prof. Glauber Santiago - UFSCar</p>
 
 <div class="panel">
     <h3>Preset DX7</h3>
@@ -51,11 +61,13 @@ label { color: #aaa; font-size: 0.9em; display: flex; justify-content: space-bet
 <div class="panel">
     <button onclick="playDX()">Tocar Cmaj7 DX7</button>
     <button onclick="exportPrompt()">Gerar Prompt para IA</button>
+    <button id="install-btn" hidden>Instalar aplicativo</button>
     <textarea id="code" placeholder="O prompt para a IA será gerado aqui..."></textarea>
 </div>
 
 <script>
 let ctx;
+let deferredPrompt;
 function initAudio() {
     if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
 }
@@ -73,7 +85,8 @@ const els = {
     mod: document.getElementById('mod'),
     index: document.getElementById('index'),
     vol: document.getElementById('vol'),
-    code: document.getElementById('code')
+    code: document.getElementById('code'),
+    installBtn: document.getElementById('install-btn')
 };
 
 function updateUI() {
@@ -168,6 +181,31 @@ Regras de implementação:
 
     els.code.value = promptText;
     els.code.select(); // Seleciona o texto para facilitar o copiar e colar
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredPrompt = event;
+    els.installBtn.hidden = false;
+});
+
+els.installBtn.addEventListener('click', async () => {
+    if(!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    els.installBtn.hidden = true;
+});
+
+window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    els.installBtn.hidden = true;
+});
+
+if('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js');
+    });
 }
 
 loadPreset();
